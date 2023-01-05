@@ -50,6 +50,8 @@ architecture rtl of numeron is
     signal mode: std_logic_vector(1 downto 0);
     signal din: std_logic_vector(3 downto 0);
     signal sift: std_logic_vector(2 downto 0) := "001";
+    signal view_led1, view_led2, view_led3 : std_logic_vector(3 downto 0);
+    signal state_view_low, state_view_high : std_logic_vector(3 downto 0);
 
     -- 自分の数字
     signal set_my_flag : std_logic_vector(2 downto 0);
@@ -68,10 +70,6 @@ architecture rtl of numeron is
     signal send_eat, send_bite, receive_eat, receive_bite : std_logic;
     signal EAT, BITE, rcvEAT, rcvBITE : std_logic_vector(1 downto 0) := "00";
 
-    -- 表示用
-    signal display, displayradr, displaywadr : std_logic_vector(3 downto 0);
-    signal displaybite, displayeat : std_logic_vector(3 downto 0);
-
     component clock_gen
         generic(N: integer);
         port(clk, xrst: in  std_logic;
@@ -89,39 +87,35 @@ architecture rtl of numeron is
         port(q  : in  std_logic_vector(3 downto 0);
              ans: out std_logic_vector(3 downto 0));
     end component;
-    -- component chattering_bt
-    --     port(clk, xrst: in std_logic;  
-    --          button   : in std_logic;
-    --          no_chattering: out std_logic);
-    -- end component;
-    -- component chattering_sw
-    --     port(clk, xrst: in std_logic;  
-    --          button   : in std_logic;
-    --          no_chattering: out std_logic);
-    -- end component;
+    component chattering_bt
+        port(clk, xrst: in std_logic;  
+             button   : in std_logic;
+             no_chattering: out std_logic);
+    end component;
+    component chattering_sw
+        port(clk, xrst: in std_logic;  
+             button   : in std_logic;
+             no_chattering: out std_logic);
+    end component;
 begin
     clk <= CLOCK_50;
     xrst <= RESET_N;
 
     -- 先攻
-
     GPIO_1(2) <= send_expect_cycle;
     GPIO_1(7) <= send_eatbite_cycle;
     GPIO_1(6 downto 3) <= send_expect_signal;
     GPIO_1(9 downto 8) <= send_eatbite_signal;
-
     recv_expect_cycle <= GPIO_1(10);
     recv_eatbite_cycle <= GPIO_1(15);
     recv_expect_signal <= GPIO_1(14 downto 11);
     recv_eatbite_signal <= GPIO_1(17 downto 16);
 
     -- 後攻
-
     -- GPIO_1(10) <= send_expect_cycle;
     -- GPIO_1(15) <= send_eatbite_cycle;
     -- GPIO_1(14 downto 11) <= send_expect_signal;
     -- GPIO_1(17 downto 16) <= send_eatbite_signal;
-
     -- recv_expect_cycle <= GPIO_1(2);
     -- recv_eatbite_cycle <= GPIO_1(7);
     -- recv_expect_signal <= GPIO_1(6 downto 3);
@@ -133,14 +127,109 @@ begin
     mode <= nSW(9 downto 8);
 
     nochattering_bt : for i in 0 to 3 generate
-        -- cs : chattering_bt port map(clk => clk, xrst => xrst, button => KEY(i), no_chattering => button(i)); -- not test
-        button(i) <= not KEY(i); -- test case only 負論理を正論理に
+        cs : chattering_bt port map(clk => clk, xrst => xrst, button => KEY(i), no_chattering => button(i)); -- not test
+        -- button(i) <= not KEY(i); -- test case only 負論理を正論理に
     end generate nochattering_bt;
 
     nochattering_sw : for i in 0 to 9 generate
-        -- cs : chattering_sw port map(clk => clk, xrst => xrst, button => SW(i), no_chattering => nSW(i)); -- not test
-        nSW(i) <= SW(i); -- test case only
+        cs : chattering_sw port map(clk => clk, xrst => xrst, button => SW(i), no_chattering => nSW(i)); -- not test
+        -- nSW(i) <= SW(i); -- test case only
     end generate nochattering_sw;
+
+    hex_0: seven_seg_decoder port map (clk, xrst, din, HEX0);
+    hex_1: seven_seg_decoder port map (clk, xrst, view_led1, HEX1);
+    hex_2: seven_seg_decoder port map (clk, xrst, view_led2, HEX2);
+    hex_3: seven_seg_decoder port map (clk, xrst, view_led3, HEX3);
+    hex_4: seven_seg_decoder port map (clk, xrst, state_view_low , HEX4);
+    hex_5: seven_seg_decoder port map (clk, xrst, state_view_high, HEX5);
+    
+    view_led1 <= my_number(0)     when mode = "00" else
+                 expect_number(0) when mode = "01" else
+                 "00" & EAT       when mode = "10" else
+                 "00" & BITE      when mode = "11" else
+                 "0000";
+    view_led2 <= my_number(1)     when mode = "00" else
+                 expect_number(1) when mode = "01" else
+                 "00" & rcvEAT    when mode = "10" else
+                 "00" & rcvBITE   when mode = "11" else
+                 "0000";
+    view_led3 <= my_number(2)     when mode = "00" else
+                 expect_number(2) when mode = "01" else
+                 "0000";
+
+    LEDR(2 downto 0) <= set_my_flag;
+    LEDR(5 downto 3) <= set_expect_flag;
+    LEDR(7 downto 6) <= "00";
+    LEDR(8) <= GPIO_1(0);
+    LEDR(9) <= GPIO_1(1);
+
+    process(clk)
+    begin
+        if (clk'event and clk = '1') then
+            case state is
+                when s0 => 
+                    state_view_high <= "0000";
+                    state_view_low  <= "0000";
+                when s1 => 
+                    state_view_high <= "0000";
+                    state_view_low  <= "0001";
+                when s2 => 
+                    state_view_high <= "0000";
+                    state_view_low  <= "0010";
+                when s10 => 
+                    state_view_high <= "0001";
+                    state_view_low  <= "0000";
+                when s11 => 
+                    state_view_high <= "0001";
+                    state_view_low  <= "0001";
+                when s12 => 
+                    state_view_high <= "0001";
+                    state_view_low  <= "0010";
+                when s13 => 
+                    state_view_high <= "0001";
+                    state_view_low  <= "0011";
+                when s14 => 
+                    state_view_high <= "0001";
+                    state_view_low  <= "0100";
+                when s20 => 
+                    state_view_high <= "0010";
+                    state_view_low  <= "0000";
+                when s21 => 
+                    state_view_high <= "0010";
+                    state_view_low  <= "0001";
+                when s22 => 
+                    state_view_high <= "0010";
+                    state_view_low  <= "0010";
+                when s23 => 
+                    state_view_high <= "0010";
+                    state_view_low  <= "0011";
+                when s30 => 
+                    state_view_high <= "0011";
+                    state_view_low  <= "0000";
+                when s31 => 
+                    state_view_high <= "0011";
+                    state_view_low  <= "0001";
+                when s32 => 
+                    state_view_high <= "0011";
+                    state_view_low  <= "0010";
+                when s40 => 
+                    state_view_high <= "0100";
+                    state_view_low  <= "0000";
+                when s41 => 
+                    state_view_high <= "0100";
+                    state_view_low  <= "0001";
+                when s42 => 
+                    state_view_high <= "0100";
+                    state_view_low  <= "0010";
+                when s43 => 
+                    state_view_high <= "0100";
+                    state_view_low  <= "0011";
+                when s50 => 
+                    state_view_high <= "0101";
+                    state_view_low  <= "0000";
+            end case;
+        end if;
+    end process;
 
     -- 各状態の動作
     process(clk)
