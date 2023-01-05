@@ -49,7 +49,6 @@ architecture rtl of numeron is
     signal nSW: std_logic_vector(9 downto 0);
     signal mode: std_logic_vector(1 downto 0);
     signal din: std_logic_vector(3 downto 0);
-    signal sift: std_logic_vector(2 downto 0) := "001";
     signal view_led1, view_led2, view_led3 : std_logic_vector(3 downto 0);
     signal state_view_low, state_view_high : std_logic_vector(3 downto 0);
 
