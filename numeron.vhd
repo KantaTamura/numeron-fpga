@@ -47,19 +47,20 @@ architecture rtl of numeron is
     signal state: state_type;
     signal button : std_logic_vector(3 downto 0);
     signal nSW: std_logic_vector(9 downto 0);
-    signal mode: std_logic_vector(1 downto 0);
+    signal mode1, mode2: std_logic_vector(1 downto 0);
     signal din: std_logic_vector(3 downto 0);
-    signal view_led1, view_led2, view_led3 : std_logic_vector(3 downto 0);
+    signal view_led1, view_led2, view_led3, view_led4, view_led5 : std_logic_vector(3 downto 0);
     signal state_view_low, state_view_high : std_logic_vector(3 downto 0);
+    signal buf : std_logic_vector(2 downto 0) := "000";
 
     -- 自分の数字
     signal set_my_flag : std_logic_vector(2 downto 0);
-    signal my_address : integer;
+    signal my_address : integer  := 0;
     signal my_number : mem;
 
     -- 予想の数字
     signal set_expect_flag : std_logic_vector(2 downto 0);
-    signal expect_address : integer;
+    signal expect_address : integer := 0;
     signal expect_number : mem;
 
     --送受信
@@ -101,29 +102,30 @@ begin
     xrst <= RESET_N;
 
     -- 先攻
-    GPIO_1(2) <= send_expect_cycle;
-    GPIO_1(7) <= send_eatbite_cycle;
-    GPIO_1(6 downto 3) <= send_expect_signal;
-    GPIO_1(9 downto 8) <= send_eatbite_signal;
-    recv_expect_cycle <= GPIO_1(10);
-    recv_eatbite_cycle <= GPIO_1(15);
-    recv_expect_signal <= GPIO_1(14 downto 11);
-    recv_eatbite_signal <= GPIO_1(17 downto 16);
+    -- GPIO_1(2) <= send_expect_cycle;
+    -- GPIO_1(7) <= send_eatbite_cycle;
+    -- GPIO_1(6 downto 3) <= send_expect_signal;
+    -- GPIO_1(9 downto 8) <= send_eatbite_signal;
+    -- recv_expect_cycle <= GPIO_1(10);
+    -- recv_eatbite_cycle <= GPIO_1(15);
+    -- recv_expect_signal <= GPIO_1(14 downto 11);
+    -- recv_eatbite_signal <= GPIO_1(17 downto 16);
 
     -- 後攻
-    -- GPIO_1(10) <= send_expect_cycle;
-    -- GPIO_1(15) <= send_eatbite_cycle;
-    -- GPIO_1(14 downto 11) <= send_expect_signal;
-    -- GPIO_1(17 downto 16) <= send_eatbite_signal;
-    -- recv_expect_cycle <= GPIO_1(2);
-    -- recv_eatbite_cycle <= GPIO_1(7);
-    -- recv_expect_signal <= GPIO_1(6 downto 3);
-    -- recv_eatbite_signal <= GPIO_1(9 downto 8);
+    GPIO_1(10) <= send_expect_cycle;
+    GPIO_1(15) <= send_eatbite_cycle;
+    GPIO_1(14 downto 11) <= send_expect_signal;
+    GPIO_1(17 downto 16) <= send_eatbite_signal;
+    recv_expect_cycle <= GPIO_1(2);
+    recv_eatbite_cycle <= GPIO_1(7);
+    recv_expect_signal <= GPIO_1(6 downto 3);
+    recv_eatbite_signal <= GPIO_1(9 downto 8);
 
     cg: clock_gen generic map(N) port map(clk, xrst, enable, cnt_max, clk_tx);
     dec: dec_decoder port map(nSW(3 downto 0), din); -- 0 - 9 => そのまま，9以上 => 9を返す
 
-    mode <= nSW(9 downto 8);
+    mode1 <= nSW(9 downto 8);
+    mode2 <= nSW(7 downto 6);
 
     nochattering_bt : for i in 0 to 3 generate
         cs : chattering_bt port map(clk => clk, xrst => xrst, button => KEY(i), no_chattering => button(i)); -- not test
@@ -139,28 +141,26 @@ begin
     hex_1: seven_seg_decoder port map (clk, xrst, view_led1, HEX1);
     hex_2: seven_seg_decoder port map (clk, xrst, view_led2, HEX2);
     hex_3: seven_seg_decoder port map (clk, xrst, view_led3, HEX3);
-    hex_4: seven_seg_decoder port map (clk, xrst, state_view_low , HEX4);
-    hex_5: seven_seg_decoder port map (clk, xrst, state_view_high, HEX5);
+    hex_4: seven_seg_decoder port map (clk, xrst, view_led4, HEX4);
+    hex_5: seven_seg_decoder port map (clk, xrst, view_led5, HEX5);
     
-    view_led1 <= my_number(0)     when mode = "00" else
-                 expect_number(0) when mode = "01" else
-                 "00" & EAT       when mode = "10" else
-                 "00" & BITE      when mode = "11" else
+    view_led1 <= my_number(0)     when mode1 = "00" else
+                 expect_number(0) when mode1 = "01" else
+                 "00" & EAT       when mode1 = "10" else
+                 "00" & rcvEAT    when mode1 = "11" else
                  "0000";
-    view_led2 <= my_number(1)     when mode = "00" else
-                 expect_number(1) when mode = "01" else
-                 "00" & rcvEAT    when mode = "10" else
-                 "00" & rcvBITE   when mode = "11" else
+    view_led2 <= my_number(1)     when mode1 = "00" else
+                 expect_number(1) when mode1 = "01" else
+                 "00" & BITE      when mode1 = "10" else
+                 "00" & rcvBITE   when mode1 = "11" else
                  "0000";
-    view_led3 <= my_number(2)     when mode = "00" else
-                 expect_number(2) when mode = "01" else
+    view_led3 <= my_number(2)     when mode1 = "00" else
+                 expect_number(2) when mode1 = "01" else
                  "0000";
+    view_led4 <= conv_std_logic_vector(my_address, 4)     when mode2 = "00" else state_view_low;
+    view_led5 <= conv_std_logic_vector(expect_address, 4) when mode2 = "00" else state_view_high;
 
-    LEDR(2 downto 0) <= set_my_flag;
-    LEDR(5 downto 3) <= set_expect_flag;
-    LEDR(7 downto 6) <= "00";
-    LEDR(8) <= GPIO_1(0);
-    LEDR(9) <= GPIO_1(1);
+    LEDR <= "1111111111" when state = s50 else GPIO_1(1) & GPIO_1(0) & "00" & set_expect_flag & set_my_flag;
 
     process(clk)
     begin
@@ -236,8 +236,8 @@ begin
         if (clk'event and clk = '1') then
             case state is
                 when s0 => -- 初期状態
-                    GPIO_1(0) <= '0'; -- 先攻
-                    -- GPIO_1(1) <= '0'; -- 後攻
+                    -- GPIO_1(0) <= '0'; -- 先攻
+                    GPIO_1(1) <= '0'; -- 後攻
                     send_expect_cycle  <= '1';
                     send_eatbite_cycle <= '1';
                     enable <= '0';
@@ -245,11 +245,20 @@ begin
                     set_my_flag <= "000";
                     expect_address <= 0;
                     set_expect_flag <= "000";
+                    buf <= buf + 1;
                 when s1 => -- 数字を選択
                     if (button(1) = '1') then
-                        my_address <= 0 when my_address = 2 else my_address + 1;
+                        if (my_address = 2) then
+                            my_address <= 0;
+                        else
+                            my_address <= my_address + 1;
+                        end if;
                     elsif (button(2) = '1') then
-                        my_address <= 2 when my_address = 0 else my_address - 1;
+                        if (my_address = 0) then
+                            my_address <= 2;
+                        else
+                            my_address <= my_address - 1;
+                        end if;
                     elsif (button(3) = '1') then
                         if (my_number(0) /= din and my_number(1) /= din and my_number(2) /= din) then
                             my_number(my_address) <= din;
@@ -263,14 +272,22 @@ begin
                         end if;
                     end if;
                 when s2 => -- 準備完了通知
-                    GPIO_1(0) <= '1'; -- 先攻
-                    -- GPIO_1(1) <= '1'; -- 後攻
+                    -- GPIO_1(0) <= '1'; -- 先攻
+                    GPIO_1(1) <= '1'; -- 後攻
 
                 when s10 => -- 予想数字決定
                     if (button(1) = '1') then
-                        expect_address <= 0 when expect_address = 2 else expect_address + 1;
+                        if (expect_address = 2) then
+                            expect_address <= 0;
+                        else
+                            expect_address <= expect_address + 1;
+                        end if;
                     elsif (button(2) = '1') then
-                        expect_address <= 2 when expect_address = 0 else expect_address - 1;
+                        if (expect_address = 0) then
+                            expect_address <= 2;
+                        else
+                            expect_address <= expect_address - 1;
+                        end if;
                     elsif (button(3) = '1') then
                         if (expect_number(0) /= din and expect_number(1) /= din and expect_number(2) /= din) then
                             expect_number(expect_address) <= din;
@@ -319,7 +336,7 @@ begin
                     end if;
                 when s22 => -- EAT受信
                     if (cnt2 < cnt1) then
-                        if (conv_integer(cnt2) = 2) then
+                        if (conv_integer(cnt2) = conv_integer(cnt1)/2) then
                             cnt2 <= cnt2 + 1;
                             rcvEAT <= recv_eatbite_signal;
                         else
@@ -331,7 +348,7 @@ begin
                     end if;
                 when s23 => -- BITE受信
                     if (cnt2 < cnt1) then
-                        if (conv_integer(cnt2) = 2) then
+                        if (conv_integer(cnt2) = conv_integer(cnt1)/2) then
                             cnt2 <= cnt2 + 1;
                             rcvBITE <= recv_eatbite_signal;
                         else
@@ -354,7 +371,7 @@ begin
                     end if;
                 when s32 => -- 予想数字からEAT・BITEを決定
                     if (cnt2 < cnt1) then
-                        if (conv_integer(cnt2) = 2) then
+                        if (conv_integer(cnt2) = conv_integer(cnt1)/2) then
                             cnt2 <= cnt2 + 1;
                             if (my_number(received_num) = recv_expect_signal) then
                                 EAT <= EAT + 1;
@@ -368,7 +385,7 @@ begin
                         cnt2 <= (others => '0');
                         received_num <= received_num + 1;
                     end if;
-
+                
                 when s40 => -- EAT・BITE送信準備
                     send_eat <= '0';
                     send_bite <= '0';
@@ -398,6 +415,7 @@ begin
                     BITE <= "00";
                     rcvEAT <= "00";
                     rcvBITE <= "00";
+                    buf <= "000";
             end case;
         end if;
     end process;
@@ -407,13 +425,13 @@ begin
     begin
         if (xrst = '0') then
             state <= s0;
-        elsif (clk'event and clk = '1' and state = s0) then
+        elsif (clk'event and clk = '1' and state = s0 and buf = "111") then
             state <= s1;
         elsif (clk'event and clk = '1' and state = s1 and button(0) = '1' and set_my_flag = "111") then
             state <= s2;
         elsif (clk'event and clk = '1' and state = s2 and GPIO_1(0) = '1' and GPIO_1(1) = '1') then
-            state <= s10; -- 先攻
-            -- state <= s30; -- 後攻
+            -- state <= s10; -- 先攻
+            state <= s30; -- 後攻
         
         elsif (clk'event and clk = '1' and state = s10 and button(0) = '1' and set_expect_flag = "111") then
             state <= s11;
@@ -455,7 +473,7 @@ begin
         elsif (clk'event and clk = '1' and state = s43 and enable = '0') then
             state <= s10;
 
-        elsif (clk'event and clk = '1' and state = s50) then
+        elsif (clk'event and clk = '1' and state = s50 and button(0) = '1') then
             state <= s0;
         end if;
     end process;
